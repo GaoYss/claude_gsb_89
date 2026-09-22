@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from app.schemas.common import NamedCount
-from app.schemas.hazard import HazardRead
+from app.schemas.hazard import HazardRead, RectificationStats
 from app.schemas.inspection import InspectionBrief
 
 
@@ -23,6 +23,10 @@ class OverviewSummary(BaseModel):
     hazard_overdue: int = Field(default=0, description="逾期未整改隐患数")
     hazard_by_status: list[NamedCount] = Field(default_factory=list)
     hazard_by_severity: list[NamedCount] = Field(default_factory=list)
+
+    rectification: RectificationStats = Field(
+        description="整改任务统计：重启前（首轮）与重启后分开计算闭环率 / 办理时长"
+    )
 
     recent_inspections: list[InspectionBrief] = Field(default_factory=list)
     urgent_hazards: list[HazardRead] = Field(default_factory=list)

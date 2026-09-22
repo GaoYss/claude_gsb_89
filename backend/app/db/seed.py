@@ -7,7 +7,14 @@ from sqlalchemy import func, select
 
 from app.db.base import now_local
 from app.db.session import SessionLocal
-from app.models import Hazard, HazardRectification, Inspection, InspectionItem, Reservoir
+from app.models import (
+    Hazard,
+    HazardRectification,
+    HazardRectificationCycle,
+    Inspection,
+    InspectionItem,
+    Reservoir,
+)
 
 logger = logging.getLogger("app.seed")
 
@@ -513,6 +520,38 @@ HAZARDS: list[dict] = [
             ("progress", "杂草清除完毕，白蚁药剂处理完成，申请验收", "郑宏", 6, "rectifying", "pending_acceptance"),
         ],
     },
+    {
+        "reservoir": 0,
+        "inspection": None,
+        "title": "背水坡排水沟局部开裂",
+        "category": "slope",
+        "severity": "general",
+        "status": "rectifying",
+        "source": "maintenance",
+        "discovered_days_ago": 70,
+        "deadline_offset": 10,
+        "first_deadline_offset": -33,
+        "closed_days_ago": 35,
+        "discoverer": "陈立",
+        "assignee": "临江区水利工程管理所",
+        "description": "背水坡左侧排水沟侧壁出现长约 1.5 米纵向裂缝，影响排水通畅。",
+        "plan": "拆除开裂段重新砌筑，并每隔 5 米设置伸缩缝。",
+        "records": [
+            ("measure", "拆除开裂沟段并重新浆砌，砂浆养护 7 天", "陈立", 58, "registered", "rectifying"),
+            ("verify", "现场复核沟体完好、排水通畅，验收通过并销号", "临江区水利局", 35, "rectifying", "closed"),
+        ],
+        "reopen": {
+            "days_ago": 6,
+            "deadline_offset": 10,
+            "status": "rectifying",
+            "operator": "陈立",
+            "reason": "日常巡查发现原开裂位置相邻约 2 米处排水沟侧壁再次出现纵向裂缝，属同类问题。",
+            "basis": "本月日常巡查记录及现场复核照片，经镇水利站确认需要重新整改。",
+            "records": [
+                ("measure", "扩大拆除范围重新砌筑，全沟补设伸缩缝", "陈立", 3, "registered", "rectifying"),
+            ],
+        },
+    },
 ]
 
 
@@ -566,6 +605,15 @@ def seed_demo_data() -> None:
 
         for plan in HAZARDS:
             discovered_on = today - timedelta(days=plan["discovered_days_ago"])
+            reopen_plan = plan.get("reopen")
+            is_reopened = reopen_plan is not None
+
+            # 重启隐患当前在办，主单期限取本轮期限
+            active_deadline_offset = (
+                reopen_plan["deadline_offset"]
+                if is_reopened
+                else plan.get("deadline_offset")
+            )
             hazard = Hazard(
                 code=_code("YH", discovered_on, counters),
                 reservoir_id=reservoirs[plan["reservoir"]].id,
@@ -577,26 +625,51 @@ def seed_demo_data() -> None:
                 title=plan["title"],
                 category=plan["category"],
                 severity=plan["severity"],
-                status=plan["status"],
+                status=reopen_plan["status"] if is_reopened else plan["status"],
                 source=plan["source"],
                 discovered_on=discovered_on,
                 discoverer=plan["discoverer"],
                 deadline=(
-                    today + timedelta(days=plan["deadline_offset"])
-                    if plan.get("deadline_offset") is not None
+                    today + timedelta(days=active_deadline_offset)
+                    if active_deadline_offset is not None
                     else None
                 ),
                 assignee=plan["assignee"],
                 description=plan["description"],
                 plan=plan["plan"],
-                closed_on=(
+                # 重启后主单不再计入已销号，销号日期清空
+                closed_on=None if is_reopened else (
                     today - timedelta(days=plan["closed_days_ago"])
                     if plan.get("closed_days_ago") is not None
                     else None
                 ),
+                reopen_count=1 if is_reopened else 0,
+            )
+            first_cycle_closed_on = (
+                today - timedelta(days=plan["closed_days_ago"])
+                if plan.get("closed_days_ago") is not None
+                else None
+            )
+            hazard.cycles.append(
+                HazardRectificationCycle(
+                    seq=1,
+                    started_on=discovered_on,
+                    # 首轮的历史销号日期原样保留（重启只新增轮次，不改写历史）
+                    closed_on=first_cycle_closed_on,
+                    deadline=(
+                        today + timedelta(days=plan["first_deadline_offset"])
+                        if plan.get("first_deadline_offset") is not None
+                        else (
+                            today + timedelta(days=plan["deadline_offset"])
+                            if plan.get("deadline_offset") is not None
+                            else None
+                        )
+                    ),
+                )
             )
             hazard.rectifications.append(
                 HazardRectification(
+                    cycle_seq=1,
                     action="register",
                     content=f"隐患登记：{plan['title']}",
                     operator=plan["discoverer"],
@@ -607,6 +680,7 @@ def seed_demo_data() -> None:
             for action, content, operator, days_ago, status_from, status_to in plan["records"]:
                 hazard.rectifications.append(
                     HazardRectification(
+                        cycle_seq=1,
                         action=action,
                         content=content,
                         operator=operator,
@@ -615,6 +689,53 @@ def seed_demo_data() -> None:
                         status_to=status_to,
                     )
                 )
+
+            if is_reopened:
+                reopen_on = today - timedelta(days=reopen_plan["days_ago"])
+                hazard.cycles.append(
+                    HazardRectificationCycle(
+                        seq=2,
+                        started_on=reopen_on,
+                        closed_on=None,
+                        deadline=(
+                            today + timedelta(days=reopen_plan["deadline_offset"])
+                            if reopen_plan.get("deadline_offset") is not None
+                            else None
+                        ),
+                        reopen_reason=reopen_plan["reason"],
+                        reopen_basis=reopen_plan["basis"],
+                        operator=reopen_plan.get("operator"),
+                    )
+                )
+                hazard.rectifications.append(
+                    HazardRectification(
+                        cycle_seq=2,
+                        action="reopen",
+                        content=(
+                            f"申请重启整改（第 2 轮）。\n"
+                            f"重启原因：{reopen_plan['reason']}\n重启依据：{reopen_plan['basis']}"
+                        ),
+                        operator=reopen_plan.get("operator"),
+                        recorded_at=now_local() - timedelta(days=reopen_plan["days_ago"]),
+                        status_from="closed",
+                        status_to="registered",
+                    )
+                )
+                for action, content, operator, days_ago, status_from, status_to in reopen_plan[
+                    "records"
+                ]:
+                    hazard.rectifications.append(
+                        HazardRectification(
+                            cycle_seq=2,
+                            action=action,
+                            content=content,
+                            operator=operator,
+                            recorded_at=now_local() - timedelta(days=days_ago),
+                            status_from=status_from,
+                            status_to=status_to,
+                        )
+                    )
+
             db.add(hazard)
 
         db.commit()

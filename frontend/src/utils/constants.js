@@ -36,6 +36,7 @@ export const TAG_TONES = {
     progress: 'accent',
     verify: 'warn',
     close: 'ok',
+    reopen: 'warn',
   },
 }
 

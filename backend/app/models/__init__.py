@@ -15,7 +15,11 @@ from app.models.enums import (
     StructurePart,
     Weather,
 )
-from app.models.hazard import Hazard, HazardRectification
+from app.models.hazard import (
+    Hazard,
+    HazardRectification,
+    HazardRectificationCycle,
+)
 from app.models.inspection import Inspection, InspectionItem
 from app.models.reservoir import Reservoir
 
@@ -24,6 +28,7 @@ __all__ = [
     "DamType",
     "Hazard",
     "HazardRectification",
+    "HazardRectificationCycle",
     "HazardSeverity",
     "HazardSource",
     "HazardStatus",

@@ -14,9 +14,10 @@ from app.models.enums import (
     ReservoirStatus,
 )
 from app.schemas.common import NamedCount
-from app.schemas.hazard import HazardRead
+from app.schemas.hazard import HazardRead, RectificationStats
 from app.schemas.inspection import InspectionBrief
 from app.schemas.overview import OverviewSummary
+from app.services import hazard_service
 
 
 def _distribution(db: Session, model, column, enum_cls) -> list[NamedCount]:
@@ -115,6 +116,7 @@ def build_summary(db: Session, recent_limit: int = 5) -> OverviewSummary:
         hazard_overdue=hazard_overdue,
         hazard_by_status=_distribution(db, Hazard, Hazard.status, HazardStatus),
         hazard_by_severity=_distribution(db, Hazard, Hazard.severity, HazardSeverity),
+        rectification=RectificationStats(**hazard_service.rectification_stats(db)),
         recent_inspections=recent_inspections,
         urgent_hazards=urgent_hazards,
     )

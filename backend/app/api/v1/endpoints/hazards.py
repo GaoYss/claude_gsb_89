@@ -15,6 +15,7 @@ from app.schemas.hazard import (
     HazardDetail,
     HazardRead,
     HazardRectificationCreate,
+    HazardReopenRequest,
     HazardTransitionRequest,
     HazardUpdate,
 )
@@ -96,6 +97,19 @@ def transition_hazard(
     hazard_id: int, payload: HazardTransitionRequest, db: DbSession
 ) -> HazardDetail:
     return hazard_service.transition_hazard(db, hazard_id, payload)
+
+
+@router.post(
+    "/{hazard_id}/reopen",
+    response_model=HazardDetail,
+    summary="已销号隐患申请重启（同类问题再次出现时重新进入整改流程）",
+    responses={
+        409: {"description": "隐患未销号，已有在办整改任务，不能重复发起"},
+        422: {"description": "缺少重启原因 / 依据 / 确认"},
+    },
+)
+def reopen_hazard(hazard_id: int, payload: HazardReopenRequest, db: DbSession) -> HazardDetail:
+    return hazard_service.reopen_hazard(db, hazard_id, payload)
 
 
 @router.delete("/{hazard_id}", response_model=Message, summary="删除隐患及其整改流水")

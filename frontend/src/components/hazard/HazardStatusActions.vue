@@ -10,7 +10,7 @@ const props = defineProps({
   submitting: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['submit'])
+const emit = defineEmits(['submit', 'reopen'])
 
 const dictionary = useDictionaryStore()
 const content = ref('')
@@ -76,7 +76,18 @@ function activate(transition) {
           </button>
         </div>
       </template>
-      <p v-else class="muted" style="margin: 0">该隐患已销号，流程结束。如需处理新的问题请重新登记隐患。</p>
+      <p v-else class="muted" style="margin: 0 0 12px">
+        该隐患已销号，整改流程结束。如同类问题再次出现，可申请重启，基于原隐患单进入新一轮整改。
+      </p>
+      <button
+        v-if="!transitions.length"
+        class="btn btn-primary"
+        type="button"
+        :disabled="submitting"
+        @click="emit('reopen')"
+      >
+        申请重启整改
+      </button>
     </div>
   </section>
 </template>

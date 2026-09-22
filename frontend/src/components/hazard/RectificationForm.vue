@@ -24,9 +24,11 @@ watch(
   },
 )
 
-// 登记记录由系统自动生成，不由人工选择
+// 登记、重启记录由系统自动生成，不由人工选择
 const actionOptions = computed(() =>
-  dictionary.options('rectification_action').filter((item) => item.value !== 'register'),
+  dictionary
+    .options('rectification_action')
+    .filter((item) => item.value !== 'register' && item.value !== 'reopen'),
 )
 
 function submit() {

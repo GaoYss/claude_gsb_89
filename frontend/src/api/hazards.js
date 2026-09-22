@@ -28,3 +28,7 @@ export function transitionHazard(id, payload) {
   return http.post(`/hazards/${id}/transition`, payload)
 }
 
+export function reopenHazard(id, payload) {
+  return http.post(`/hazards/${id}/reopen`, payload)
+}
+

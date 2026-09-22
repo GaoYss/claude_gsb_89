@@ -8,6 +8,7 @@ import DistributionList from '@/components/common/DistributionList.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import StatCard from '@/components/common/StatCard.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
+import RectificationStatsCard from '@/components/hazard/RectificationStatsCard.vue'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useToastStore } from '@/stores/toast'
 import { deadlineHint, formatDateTime } from '@/utils/format'
@@ -89,6 +90,8 @@ onMounted(async () => {
         <DistributionList :items="summary.reservoir_by_status" tone-key="reservoir_status" />
       </BaseCard>
     </div>
+
+    <RectificationStatsCard :stats="summary.rectification" />
 
     <BaseCard title="待办隐患" subtitle="优先展示逾期与临近整改期限的隐患">
       <template #actions>
