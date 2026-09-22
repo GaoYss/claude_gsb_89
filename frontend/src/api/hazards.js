@@ -28,3 +28,14 @@ export function transitionHazard(id, payload) {
   return http.post(`/hazards/${id}/transition`, payload)
 }
 
+export function applyReopen(id, payload) {
+  return http.post(`/hazards/${id}/reopen`, payload)
+}
+
+export function reviewReopen(reopenId, payload) {
+  return http.post(`/hazards/reopens/${reopenId}/review`, payload)
+}
+
+export function fetchReopens(params) {
+  return http.get('/hazards/reopens', { params: compact(params) })
+}

@@ -7,7 +7,15 @@ from sqlalchemy import func, select
 
 from app.db.base import now_local
 from app.db.session import SessionLocal
-from app.models import Hazard, HazardRectification, Inspection, InspectionItem, Reservoir
+from app.models import (
+    Hazard,
+    HazardRectification,
+    HazardReopen,
+    Inspection,
+    InspectionItem,
+    Reservoir,
+)
+from app.models.enums import ReopenStatus
 
 logger = logging.getLogger("app.seed")
 
@@ -513,6 +521,39 @@ HAZARDS: list[dict] = [
             ("progress", "杂草清除完毕，白蚁药剂处理完成，申请验收", "郑宏", 6, "rectifying", "pending_acceptance"),
         ],
     },
+    {
+        # 销号后同类问题再次出现，已确认重启，当前处于第 2 轮整改中
+        "reservoir": 2,
+        "inspection": None,
+        "title": "背水坡排水沟局部堵塞",
+        "category": "dam_body",
+        "severity": "general",
+        "status": "rectifying",
+        "source": "maintenance",
+        "discovered_days_ago": 55,
+        "deadline_offset": 6,
+        "discoverer": "李文倩",
+        "assignee": "云岭县白鹤塘水库管理站",
+        "description": "背水坡排水沟入口被落叶泥石堵塞，雨季排水不畅。",
+        "plan": "清理排水沟并在入口加装拦污栅，雨后复查排水情况。",
+        "reopen": {
+            "reason": "汛期巡查发现原排水沟清理段上游约 2 米处再次被泥石堵塞，雨后积水",
+            "evidence": "9 月 12 日现场复核，沟内淤积厚度约 15 厘米，附现场照片与巡查记录",
+            "applicant": "李文倩",
+            "confirmer": "云岭县水利局",
+            "review_comment": "确认为同类排水问题复发，同意重启，要求加设拦污栅",
+            "applied_days_ago": 11,
+            "confirmed_days_ago": 10,
+            "first_closed_days_ago": 40,
+        },
+        "records": [
+            ("measure", "人工清淤 12 米，恢复排水沟过流", "李文倩", 48, "registered", "rectifying", 1),
+            ("close", "排水沟清理完成，过流顺畅，验收销号", "云岭县水利局", 40, "rectifying", "closed", 1),
+            ("reopen", "销号重启（第 2 轮整改）：同类排水问题再次出现", "云岭县水利局", 10, "closed", "registered", 2),
+            ("measure", "重新清淤并在入口加装拦污栅", "李文倩", 9, "registered", "rectifying", 2),
+            ("progress", "拦污栅安装完成，已安排雨后复查", "李文倩", 3, None, None, 2),
+        ],
+    },
 ]
 
 
@@ -566,6 +607,12 @@ def seed_demo_data() -> None:
 
         for plan in HAZARDS:
             discovered_on = today - timedelta(days=plan["discovered_days_ago"])
+            reopen_plan = plan.get("reopen")
+            first_closed_on = (
+                today - timedelta(days=reopen_plan["first_closed_days_ago"])
+                if reopen_plan
+                else None
+            )
             hazard = Hazard(
                 code=_code("YH", discovered_on, counters),
                 reservoir_id=reservoirs[plan["reservoir"]].id,
@@ -590,10 +637,15 @@ def seed_demo_data() -> None:
                 description=plan["description"],
                 plan=plan["plan"],
                 closed_on=(
-                    today - timedelta(days=plan["closed_days_ago"])
-                    if plan.get("closed_days_ago") is not None
-                    else None
+                    None
+                    if reopen_plan
+                    else (
+                        today - timedelta(days=plan["closed_days_ago"])
+                        if plan.get("closed_days_ago") is not None
+                        else None
+                    )
                 ),
+                reopen_count=1 if reopen_plan else 0,
             )
             hazard.rectifications.append(
                 HazardRectification(
@@ -602,9 +654,13 @@ def seed_demo_data() -> None:
                     operator=plan["discoverer"],
                     recorded_at=now_local() - timedelta(days=plan["discovered_days_ago"]),
                     status_to="registered",
+                    round_no=1,
                 )
             )
-            for action, content, operator, days_ago, status_from, status_to in plan["records"]:
+            for record in plan["records"]:
+                # 兼容 6 元组（默认首轮）与 7 元组（末位为轮次）
+                action, content, operator, days_ago, status_from, status_to = record[:6]
+                round_no = record[6] if len(record) > 6 else 1
                 hazard.rectifications.append(
                     HazardRectification(
                         action=action,
@@ -613,6 +669,24 @@ def seed_demo_data() -> None:
                         recorded_at=now_local() - timedelta(days=days_ago),
                         status_from=status_from,
                         status_to=status_to,
+                        round_no=round_no,
+                    )
+                )
+            if reopen_plan:
+                hazard.reopen_requests.append(
+                    HazardReopen(
+                        round_no=2,
+                        status=ReopenStatus.CONFIRMED.value,
+                        reason=reopen_plan["reason"],
+                        evidence=reopen_plan["evidence"],
+                        applicant=reopen_plan.get("applicant"),
+                        applied_at=now_local()
+                        - timedelta(days=reopen_plan["applied_days_ago"]),
+                        confirmer=reopen_plan.get("confirmer"),
+                        confirmed_at=now_local()
+                        - timedelta(days=reopen_plan["confirmed_days_ago"]),
+                        review_comment=reopen_plan.get("review_comment"),
+                        previous_closed_on=first_closed_on,
                     )
                 )
             db.add(hazard)

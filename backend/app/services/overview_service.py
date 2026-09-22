@@ -60,6 +60,26 @@ def build_summary(db: Session, recent_limit: int = 5) -> OverviewSummary:
         )
         or 0
     )
+    # 已销号只统计当前仍处于销号终态的隐患；销号后重启的隐患计入未销号
+    hazard_closed = (
+        db.scalar(
+            select(func.count())
+            .select_from(Hazard)
+            .where(Hazard.status == HazardStatus.CLOSED.value)
+        )
+        or 0
+    )
+    hazard_reopened = (
+        db.scalar(
+            select(func.count())
+            .select_from(Hazard)
+            .where(
+                Hazard.reopen_count > 0,
+                Hazard.status != HazardStatus.CLOSED.value,
+            )
+        )
+        or 0
+    )
     hazard_overdue = (
         db.scalar(
             select(func.count())
@@ -112,6 +132,8 @@ def build_summary(db: Session, recent_limit: int = 5) -> OverviewSummary:
         inspection_by_type=_distribution(db, Inspection, Inspection.inspect_type, InspectionType),
         hazard_total=hazard_total,
         hazard_open=hazard_open,
+        hazard_closed=hazard_closed,
+        hazard_reopened=hazard_reopened,
         hazard_overdue=hazard_overdue,
         hazard_by_status=_distribution(db, Hazard, Hazard.status, HazardStatus),
         hazard_by_severity=_distribution(db, Hazard, Hazard.severity, HazardSeverity),

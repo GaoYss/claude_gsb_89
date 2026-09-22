@@ -30,7 +30,7 @@
 │   │   ├── schemas/             # 出入参校验与序列化
 │   │   ├── services/            # 业务逻辑（含隐患状态机，可脱离 HTTP 单独测试）
 │   │   └── main.py              # 应用装配
-│   ├── tests/                   # pytest 接口测试（30 个用例）
+│   ├── tests/                   # pytest 接口测试（42 个用例）
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/                    # Vue 3 单页应用
@@ -67,7 +67,7 @@ docker compose up -d --build
 | http://localhost:8000/api/v1/meta/health | 后端健康检查 |
 | http://localhost:8000/docs | 后端接口文档（Swagger UI） |
 
-首次启动会自动建表并灌入演示数据（7 座水库、12 条巡查记录、8 条隐患）。已有数据时不会重复灌入；
+首次启动会自动建表并灌入演示数据（7 座水库、12 条巡查记录、9 条隐患，含 1 条销号后重启进入第 2 轮整改的样例）。已有数据时不会重复灌入；
 如需全新空库，执行 `docker compose down -v` 后重新启动。
 
 常用命令：
@@ -121,14 +121,36 @@ npm run dev                       # http://localhost:5173 ，/api 自动代理�
   ├─ 验收通过并销号 ────────> 已销号(closed)
   └─ 验收不通过(需填写说明) ─> 整改中(rectifying)
 
-已销号(closed)  终态
+已销号(closed)  终态 ──申请重启+确认依据──> 待整改(registered，新一轮整改)
 ```
 
 - 状态只能通过 `POST /api/v1/hazards/{id}/transition` 变更，每次流转都会写入整改流水（含变更前后状态），
   用 `PUT` 直接改状态会被拒绝（HTTP 422）。
 - 非法流转（例如从「待整改」直接跳到「待验收」）返回 HTTP 409。
 - 追加「整改措施」类型的记录时，隐患会自动从「待整改」进入「整改中」。
-- 已销号隐患不能再追加整改记录，也不提供任何流转入口。
+- 已销号隐患不能再追加整改记录，也不提供常规流转入口。
+
+**已销号隐患重启**：已销号隐患同类问题再次出现时，可基于**原隐患**重新进入整改流程：
+
+1. `POST /hazards/{id}/reopen` 发起申请，必须填写重启原因；申请期间隐患仍保持已销号。
+2. `POST /hazards/reopens/{id}/review` 由主管确认（`confirmed`）或驳回（`rejected`）；
+   **确认必须填写重启依据**（现场复核 / 佐证材料），还可一并指定新一轮整改期限。
+3. 确认后隐患回到「待整改」，整改轮次 +1；原有整改流水全部保留，时间轴按轮次分组，
+   并自动写入一条「销号重启」流水（closed → registered）记录原因与依据。
+4. **幂等**：同一隐患同时只允许一条待确认申请，重复发起返回原申请，只产生一条新整改任务；
+   申请被驳回后可重新发起。
+5. 重启后的隐患状态为未销号，**在所有统计中不再计入「已销号」**；可反复重启，每次开启新一轮。
+
+**重启前后分项统计**（`GET /api/v1/stats/rectification`）：每条隐患的每次销号重启开启一个新的
+整改轮次（首轮为第 1 轮）。系统分别统计首轮（重启前）与重启后（第 2 轮及以后）的：
+
+- 闭环率 = 当前仍处于该轮销号状态的任务数 ÷ 进入该轮的任务数；销号后又被重启的任务不计入分子；
+- 平均办理时长 = 该轮「轮次开始（登记 / 重启流水时间）→ 销号流水」天数的平均值。
+
+**隐患整改月报**（`/stats/monthly-reports`）：月报是生成时刻写入 `monthly_report` 表的 **JSON 快照**，
+包含当月新登记 / 销号 / 重启数量、状态与等级分布、分项轮次统计等。**月报一经生成即固化，
+之后隐患重启或状态变化都不会改写历史月报**；同期重复生成默认返回 409，确需按当前口径重算时
+须显式传 `overwrite=true`。前端「统计月报」页可生成并查看各期快照。
 
 **逾期判定**：存在整改期限且未销号，且当前日期已超过期限，即视为逾期；列表支持 `overdue_only=true`
 只筛逾期隐患，总览页单独统计逾期数量。
@@ -146,8 +168,10 @@ npm run dev                       # http://localhost:5173 ，/api 自动代理�
 | `reservoir` | 水库台账（编码唯一） | 1:N 巡查、隐患 |
 | `inspection` | 巡查记录主表（编号唯一，结论由明细推导） | N:1 水库；1:N 巡查项 |
 | `inspection_item` | 巡查项明细（部位、结果、说明） | N:1 巡查记录 |
-| `hazard` | 隐患台账（编号唯一，含状态、等级、期限、销号日期） | N:1 水库；N:1 来源巡查（可空） |
-| `hazard_rectification` | 整改跟踪流水（类型、内容、记录人、状态变更） | N:1 隐患 |
+| `hazard` | 隐患台账（编号唯一，含状态、等级、期限、本次销号日期、重启次数） | N:1 水库；N:1 来源巡查（可空） |
+| `hazard_rectification` | 整改跟踪流水（类型、内容、记录人、状态变更、所属轮次） | N:1 隐患 |
+| `hazard_reopen` | 销号重启申请与确认记录（原因、依据、确认状态、原销号日期快照） | N:1 隐患 |
+| `monthly_report` | 隐患整改月报 JSON 快照（按月份唯一，生成后不回写） | 独立表 |
 
 字典（运行状态、坝型、安全类别、隐患等级、状态等）统一在后端 `app/models/enums.py` 维护，
 由 `GET /api/v1/meta/options` 下发，前端不再重复硬编码中文标签。
@@ -170,6 +194,12 @@ npm run dev                       # http://localhost:5173 ，/api 自动代理�
 | GET/PUT/DELETE | `/hazards/{id}` | 隐患详情（含整改流水）/ 更新 / 删除 |
 | POST | `/hazards/{id}/rectifications` | 追加整改跟踪记录 |
 | POST | `/hazards/{id}/transition` | 整改状态流转 |
+| POST | `/hazards/{id}/reopen` | 已销号隐患申请重启（登记原因，待确认） |
+| POST | `/hazards/reopens/{id}/review` | 确认 / 驳回重启申请（确认需填依据） |
+| GET | `/hazards/reopens` | 分页查询重启申请（可按确认状态过滤） |
+| GET | `/stats/rectification` | 分轮次统计：重启前后闭环率 / 办理时长 |
+| GET/POST | `/stats/monthly-reports` | 月报列表 / 生成月报快照（默认禁止覆盖） |
+| GET | `/stats/monthly-reports/{period}` | 查看指定期次月报固化快照 |
 
 列表接口统一支持 `page` / `page_size`，返回 `{items, total, page, page_size, pages}`。
 
@@ -193,7 +223,7 @@ compose 的端口、数据库口令等项在根目录 `.env`（从 `.env.example
 
 ```bash
 cd backend
-python -m pytest            # 30 个接口用例：台账 CRUD、编号生成、巡查结论推导、状态机、逾期、统计
+python -m pytest            # 42 个接口用例：台账 CRUD、编号生成、巡查结论推导、状态机、重启流程、逾期、分项统计、月报快照
 ```
 
 ```bash

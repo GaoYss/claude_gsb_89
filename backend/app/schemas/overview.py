@@ -19,7 +19,11 @@ class OverviewSummary(BaseModel):
     inspection_by_type: list[NamedCount] = Field(default_factory=list)
 
     hazard_total: int = 0
-    hazard_open: int = Field(default=0, description="未销号隐患数")
+    hazard_open: int = Field(default=0, description="未销号隐患数（含销号后重启的隐患）")
+    hazard_closed: int = Field(default=0, description="当前已销号数（重启后的隐患不计入）")
+    hazard_reopened: int = Field(
+        default=0, description="销号后重启、当前仍在整改的隐患数"
+    )
     hazard_overdue: int = Field(default=0, description="逾期未整改隐患数")
     hazard_by_status: list[NamedCount] = Field(default_factory=list)
     hazard_by_severity: list[NamedCount] = Field(default_factory=list)

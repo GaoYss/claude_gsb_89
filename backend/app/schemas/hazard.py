@@ -2,13 +2,14 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from app.models.enums import (
     HazardSeverity,
     HazardSource,
     HazardStatus,
     RectificationAction,
+    ReopenStatus,
     StructurePart,
 )
 from app.schemas.common import is_overdue
@@ -66,6 +67,7 @@ class HazardRead(BaseModel):
     description: str | None = None
     plan: str | None = None
     closed_on: date | None = None
+    reopen_count: int = Field(default=0, description="销号重启次数，0 表示首轮整改中")
     created_at: datetime
     updated_at: datetime
 
@@ -94,6 +96,7 @@ class HazardRectificationRead(BaseModel):
     operator: str | None = None
     status_from: HazardStatus | None = None
     status_to: HazardStatus | None = None
+    round_no: int = 1
     recorded_at: datetime
 
 
@@ -113,8 +116,59 @@ class HazardTransitionOption(BaseModel):
     require_content: bool = False
 
 
+class HazardReopenCreate(BaseModel):
+    """已销号隐患重启申请：说明同类问题再次出现的原因。"""
+
+    reason: str = Field(min_length=5, max_length=1000, description="重启原因：同类问题再次出现的情况")
+    applicant: str | None = Field(default=None, max_length=64, description="申请人")
+
+
+class HazardReopenReview(BaseModel):
+    """重启申请的确认 / 驳回；确认必须填写重启依据。"""
+
+    decision: str = Field(description="confirmed=确认重启，rejected=驳回申请")
+    evidence: str | None = Field(
+        default=None, min_length=5, max_length=1000, description="重启依据（现场复核 / 佐证材料）"
+    )
+    confirmer: str | None = Field(default=None, max_length=64, description="确认人")
+    review_comment: str | None = Field(default=None, max_length=1000, description="确认 / 驳回意见")
+    deadline: date | None = Field(
+        default=None, description="确认重启时可一并指定新一轮整改期限"
+    )
+
+    @field_validator("decision")
+    @classmethod
+    def _check_decision(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in (ReopenStatus.CONFIRMED.value, ReopenStatus.REJECTED.value):
+            raise ValueError("decision 只能是 confirmed 或 rejected")
+        return normalized
+
+    @property
+    def confirmed(self) -> bool:
+        return self.decision == ReopenStatus.CONFIRMED.value
+
+
+class HazardReopenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    hazard_id: int
+    round_no: int
+    status: ReopenStatus
+    reason: str
+    evidence: str | None = None
+    applicant: str | None = None
+    applied_at: datetime
+    confirmer: str | None = None
+    confirmed_at: datetime | None = None
+    review_comment: str | None = None
+    previous_closed_on: date | None = None
+    hazard: HazardRead | None = None
+
+
 class HazardDetail(HazardRead):
-    """隐患详情：附带整改跟踪流水。"""
+    """隐患详情：附带整改跟踪流水与重启申请记录。"""
 
     rectifications: list[HazardRectificationRead] = Field(default_factory=list)
-
+    reopen_requests: list[HazardReopenRead] = Field(default_factory=list)

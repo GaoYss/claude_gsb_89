@@ -707,6 +707,27 @@ h4 {
   white-space: pre-wrap;
 }
 
+/* 销号重启轮次分组 */
+.timeline-round + .timeline-round {
+  margin-top: 14px;
+}
+
+.timeline-round-head {
+  margin: 0 0 10px;
+}
+
+.timeline-item-reopen::before {
+  background: var(--danger);
+}
+
+.timeline-item-reopen .timeline-body {
+  color: var(--danger);
+}
+
+.stat-value.tone-accent {
+  color: var(--primary);
+}
+
 /* 空状态 */
 .empty-state {
   padding: 34px 18px;

@@ -64,8 +64,14 @@ onMounted(async () => {
       <StatCard
         label="未销号隐患"
         :value="summary.hazard_open"
-        :hint="`隐患总数 ${summary.hazard_total} 条`"
+        :hint="`隐患总数 ${summary.hazard_total} 条，其中重启后整改 ${summary.hazard_reopened} 条`"
         :tone="summary.hazard_open ? 'warn' : 'ok'"
+      />
+      <StatCard
+        label="当前已销号"
+        :value="summary.hazard_closed"
+        hint="销号后重启的隐患不计入"
+        tone="ok"
       />
       <StatCard
         label="逾期未整改"

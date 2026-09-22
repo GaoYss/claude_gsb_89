@@ -236,6 +236,7 @@ class RectificationAction(LabeledEnum):
     PROGRESS = "progress"
     VERIFY = "verify"
     CLOSE = "close"
+    REOPEN = "reopen"
 
     @classmethod
     def labels(cls) -> dict[str, str]:
@@ -245,4 +246,21 @@ class RectificationAction(LabeledEnum):
             cls.PROGRESS.value: "整改进展",
             cls.VERIFY.value: "验收意见",
             cls.CLOSE.value: "销号说明",
+            cls.REOPEN.value: "销号重启",
+        }
+
+
+class ReopenStatus(LabeledEnum):
+    """销号重启申请的确认状态。"""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+    @classmethod
+    def labels(cls) -> dict[str, str]:
+        return {
+            cls.PENDING.value: "待确认",
+            cls.CONFIRMED.value: "已确认",
+            cls.REJECTED.value: "已驳回",
         }

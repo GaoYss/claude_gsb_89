@@ -1,14 +1,22 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { addRectification, deleteHazard, fetchHazard, transitionHazard } from '@/api/hazards'
+import {
+  addRectification,
+  applyReopen,
+  deleteHazard,
+  fetchHazard,
+  reviewReopen,
+  transitionHazard,
+} from '@/api/hazards'
 import BaseCard from '@/components/common/BaseCard.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
 import RectificationForm from '@/components/hazard/RectificationForm.vue'
 import RectificationTimeline from '@/components/hazard/RectificationTimeline.vue'
 import HazardStatusActions from '@/components/hazard/HazardStatusActions.vue'
+import HazardReopenPanel from '@/components/hazard/HazardReopenPanel.vue'
 import { useConfirmStore } from '@/stores/confirm'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useToastStore } from '@/stores/toast'
@@ -23,6 +31,11 @@ const dictionary = useDictionaryStore()
 const hazard = ref(null)
 const loading = ref(true)
 const submitting = ref(false)
+
+const roundLabel = computed(() => {
+  const count = hazard.value?.reopen_count || 0
+  return count === 0 ? '首轮整改' : `第 ${count + 1} 轮整改（已重启 ${count} 次）`
+})
 
 async function load() {
   loading.value = true
@@ -62,6 +75,31 @@ async function onAddRecord(payload) {
   }
 }
 
+async function onApplyReopen(payload) {
+  submitting.value = true
+  try {
+    await applyReopen(hazard.value.id, payload)
+    hazard.value = await fetchHazard(hazard.value.id)
+    toast.success('重启申请已提交，等待确认')
+  } catch (error) {
+    toast.error(error.message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function onReviewReopen({ reopen_id, payload }) {
+  submitting.value = true
+  try {
+    hazard.value = await reviewReopen(reopen_id, payload)
+    toast.success(payload.decision === 'confirmed' ? '已确认重启，隐患重新进入整改' : '重启申请已驳回')
+  } catch (error) {
+    toast.error(error.message)
+  } finally {
+    submitting.value = false
+  }
+}
+
 async function remove() {
   const ok = await confirm.ask(`确认删除隐患「${hazard.value.title}」？关联的整改记录会一并删除。`)
   if (!ok) return
@@ -85,6 +123,7 @@ async function remove() {
       <template #badge>
         <StatusTag kind="hazard_status" :value="hazard.status" />
         <StatusTag kind="hazard_severity" :value="hazard.severity" />
+        <span v-if="hazard.reopen_count > 0" class="tag tag-accent">已重启 {{ hazard.reopen_count }} 次</span>
         <span v-if="hazard.is_overdue" class="tag tag-overdue">逾期未整改</span>
       </template>
       <template #actions>
@@ -137,6 +176,10 @@ async function remove() {
               <dd>{{ formatDate(hazard.closed_on) }}</dd>
             </div>
             <div class="def-item">
+              <dt>整改轮次</dt>
+              <dd>{{ roundLabel }}</dd>
+            </div>
+            <div class="def-item">
               <dt>整改责任人</dt>
               <dd>{{ hazard.assignee || '—' }}</dd>
             </div>
@@ -162,7 +205,7 @@ async function remove() {
 
         <BaseCard
           title="整改跟踪"
-          :subtitle="`共 ${hazard.rectifications.length} 条记录，按时间顺序排列`"
+          :subtitle="`共 ${hazard.rectifications.length} 条记录，按轮次与时间顺序排列`"
         >
           <RectificationTimeline :records="hazard.rectifications" />
         </BaseCard>
@@ -170,16 +213,28 @@ async function remove() {
 
       <div>
         <HazardStatusActions
+          v-if="hazard.status !== 'closed'"
           :status="hazard.status"
           :assignee="hazard.assignee"
           :submitting="submitting"
           @submit="onTransition"
         />
-        <BaseCard title="追加整改记录" subtitle="用于补充措施、进展、验收等过程材料">
+        <HazardReopenPanel
+          v-else
+          :hazard="hazard"
+          :submitting="submitting"
+          @applied="onApplyReopen"
+          @reviewed="onReviewReopen"
+        />
+        <BaseCard
+          title="追加整改记录"
+          subtitle="用于补充措施、进展、验收等过程材料"
+        >
           <RectificationForm
             :submitting="submitting"
             :assignee="hazard.assignee"
             :disabled="hazard.status === 'closed'"
+            :disabled-hint="hazard.status === 'closed' ? '隐患已销号，不能再追加整改记录；如同类问题再次出现，请在上方申请重启。' : ''"
             @submit="onAddRecord"
           />
         </BaseCard>
@@ -187,4 +242,3 @@ async function remove() {
     </div>
   </div>
 </template>
-

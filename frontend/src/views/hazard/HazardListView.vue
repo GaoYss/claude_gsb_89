@@ -109,6 +109,9 @@ async function remove(row) {
         </template>
         <template #title="{ row }">
           <RouterLink :to="`/hazards/${row.id}`">{{ row.title }}</RouterLink>
+          <span v-if="row.reopen_count > 0" class="tag tag-accent" style="margin-left: 6px">
+            已重启 {{ row.reopen_count }} 次
+          </span>
         </template>
         <template #reservoir="{ row }">
           <RouterLink v-if="row.reservoir" :to="`/reservoirs/${row.reservoir.id}`">

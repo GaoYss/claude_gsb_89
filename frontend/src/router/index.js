@@ -81,6 +81,12 @@ const routes = [
     meta: { title: '编辑隐患' },
   },
   {
+    path: '/stats',
+    name: 'stats',
+    component: () => import('@/views/stats/StatsView.vue'),
+    meta: { title: '整改统计与月报' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFoundView.vue'),

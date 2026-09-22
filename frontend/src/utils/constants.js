@@ -36,6 +36,12 @@ export const TAG_TONES = {
     progress: 'accent',
     verify: 'warn',
     close: 'ok',
+    reopen: 'danger',
+  },
+  reopen_status: {
+    pending: 'warn',
+    confirmed: 'ok',
+    rejected: 'muted',
   },
 }
 
@@ -44,5 +50,6 @@ export const NAV_ITEMS = [
   { name: 'reservoirs', label: '水库台账', path: '/reservoirs' },
   { name: 'inspections', label: '巡查记录', path: '/inspections' },
   { name: 'hazards', label: '隐患与整改', path: '/hazards' },
+  { name: 'stats', label: '统计月报', path: '/stats' },
 ]
 

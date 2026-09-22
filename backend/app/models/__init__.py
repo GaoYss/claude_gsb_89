@@ -10,12 +10,13 @@ from app.models.enums import (
     InspectionType,
     ItemResult,
     RectificationAction,
+    ReopenStatus,
     ReservoirStatus,
     SafetyClass,
     StructurePart,
     Weather,
 )
-from app.models.hazard import Hazard, HazardRectification
+from app.models.hazard import Hazard, HazardRectification, HazardReopen, MonthlyReport
 from app.models.inspection import Inspection, InspectionItem
 from app.models.reservoir import Reservoir
 
@@ -24,6 +25,7 @@ __all__ = [
     "DamType",
     "Hazard",
     "HazardRectification",
+    "HazardReopen",
     "HazardSeverity",
     "HazardSource",
     "HazardStatus",
@@ -32,11 +34,12 @@ __all__ = [
     "InspectionStatus",
     "InspectionType",
     "ItemResult",
+    "MonthlyReport",
     "RectificationAction",
+    "ReopenStatus",
     "Reservoir",
     "ReservoirStatus",
     "SafetyClass",
     "StructurePart",
     "Weather",
 ]
-

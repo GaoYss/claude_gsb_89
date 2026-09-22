@@ -15,6 +15,7 @@ from app.models.enums import (
     InspectionType,
     ItemResult,
     RectificationAction,
+    ReopenStatus,
     ReservoirStatus,
     SafetyClass,
     StructurePart,
@@ -38,6 +39,7 @@ _ENUMS = {
     "hazard_source": HazardSource,
     "hazard_status": HazardStatus,
     "rectification_action": RectificationAction,
+    "reopen_status": ReopenStatus,
 }
 
 
